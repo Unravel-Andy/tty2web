@@ -4,7 +4,10 @@ import (
 	"encoding/base64"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
+
+	"github.com/kost/tty2web/utils"
 )
 
 func (server *Server) wrapLogger(handler http.Handler) http.Handler {
@@ -47,5 +50,40 @@ func (server *Server) wrapBasicAuth(handler http.Handler, credential string) htt
 
 		log.Printf("Basic Authentication Succeeded: %s", r.RemoteAddr)
 		handler.ServeHTTP(w, r)
+	})
+}
+
+// OAuth2 middleware
+func (server *Server) wrapOauth2(handler http.Handler) http.Handler {
+	noneAuthPaths := []string{
+		".*/oauth/callback",
+		".*/oauth/login",
+		".*/oauth/logout",
+		".*/static/.*",
+		".*/favicon.ico",
+		".*/favicon.png",
+		".*/js/.*",
+		".*/css/.*",
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the request path is in the list of paths that do not require authentication
+		for _, path := range noneAuthPaths {
+			if matched, _ := regexp.MatchString(path, r.URL.Path); matched {
+				// If the path is in the list, skip authentication
+				handler.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		_, err := utils.OauthTokenCheck(w, r, OauthConf, oauthCookieName)
+		if err == nil {
+			log.Printf("OAuth2 Authentication Succeeded: %s access %s", r.RemoteAddr, r.URL.Path)
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		utils.OauthMissingResponse(w, r, OauthConf)
+		log.Printf("OAuth2 Authentication Failed: %s access %s", r.RemoteAddr, r.URL.Path)
+		return
 	})
 }

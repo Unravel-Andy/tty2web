@@ -1,15 +1,14 @@
 package utils
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
 	"strings"
 
-	"github.com/urfave/cli/v2"
 	"github.com/fatih/structs"
-	"github.com/yudai/hcl"
+	"github.com/hashicorp/hcl"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kost/tty2web/pkg/homedir"
 )
@@ -38,27 +37,56 @@ func GenerateFlags(options ...interface{}) (flags []cli.Flag, mappings map[strin
 			switch field.Kind() {
 			case reflect.String:
 				flags = append(flags, &cli.StringFlag{
-					Name:   flagName,
-					Value:  field.Value().(string),
-					Usage:  flagDescription,
+					Name:    flagName,
+					Value:   field.Value().(string),
+					Usage:   flagDescription,
 					Aliases: alias,
 					EnvVars: []string{envName},
 				})
 			case reflect.Bool:
 				flags = append(flags, &cli.BoolFlag{
-					Name:   flagName,
-					Usage:  flagDescription,
+					Name:    flagName,
+					Usage:   flagDescription,
 					Aliases: alias,
 					EnvVars: []string{envName},
 				})
 			case reflect.Int:
 				flags = append(flags, &cli.IntFlag{
-					Name:   flagName,
-					Value:  field.Value().(int),
-					Usage:  flagDescription,
+					Name:    flagName,
+					Value:   field.Value().(int),
+					Usage:   flagDescription,
 					Aliases: alias,
 					EnvVars: []string{envName},
 				})
+			case reflect.Float64:
+				flags = append(flags, &cli.Float64Flag{
+					Name:    flagName,
+					Value:   field.Value().(float64),
+					Usage:   flagDescription,
+					Aliases: alias,
+					EnvVars: []string{envName},
+				})
+			case reflect.Slice:
+				// Handle slice type fields
+				if _, ok := field.Value().([]string); !ok {
+					log.Println("Warning: field ", field.Name(), " is a slice but not of type []string, skipping flag generation")
+					continue
+				}
+				flags = append(flags, &cli.StringSliceFlag{
+					Name:    flagName,
+					Usage:   flagDescription,
+					Aliases: alias,
+					Action: func(c *cli.Context, i []string) error {
+						log.Println(flagName + ": " + strings.Join(c.StringSlice(flagName), `, `))
+						err := field.Set(i)
+						if err != nil {
+							return err
+						}
+						return nil
+					},
+					EnvVars: []string{envName},
+				})
+
 			}
 		}
 	}
@@ -101,7 +129,10 @@ func ApplyFlags(
 		case reflect.Int:
 			val = c.Int(flagName)
 		}
-		field.Set(val)
+		err := field.Set(val)
+		if err != nil {
+			continue
+		}
 	}
 }
 
@@ -113,7 +144,7 @@ func ApplyConfigFile(filePath string, options ...interface{}) error {
 
 	fileString := []byte{}
 	log.Printf("Loading config file at: %s", filePath)
-	fileString, err := ioutil.ReadFile(filePath)
+	fileString, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
 	}

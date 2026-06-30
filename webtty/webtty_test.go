@@ -56,7 +56,7 @@ func withWebTTY(t *testing.T, f func(tty *WebTTY, master, slave io.ReadWriter)) 
 	master := newBiDirectionalPipe()
 	slave := newBiDirectionalPipe()
 
-	tty, err := New(master.right, slaveBiDirectionalPipeEnd{slave.left}, WithPermitWrite())
+	tty, err := New(master.right, slaveBiDirectionalPipeEnd{slave.left}, "", WithPermitWrite())
 	if err != nil {
 		t.Fatalf("Unexpected error from New(): %s", err)
 	}
@@ -64,9 +64,9 @@ func withWebTTY(t *testing.T, f func(tty *WebTTY, master, slave io.ReadWriter)) 
 	// start webtty in a goroutine and watch for errors
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
+	runErrors := make(chan error, 1)
 	wg.Add(1)
 	go func() {
-		t.Log("Starting WebTTY.Run()")
 		defer wg.Done()
 		err := tty.Run(ctx)
 		if err != nil {
@@ -75,7 +75,7 @@ func withWebTTY(t *testing.T, f func(tty *WebTTY, master, slave io.ReadWriter)) 
 				// The context is cancelled at the end of the test so ignore this error
 				break
 			default:
-				t.Fatalf("Unexpected error from Run(): %s", err)
+				runErrors <- err
 			}
 		}
 	}()
@@ -91,6 +91,10 @@ func withWebTTY(t *testing.T, f func(tty *WebTTY, master, slave io.ReadWriter)) 
 
 	cancel()
 	wg.Wait()
+	close(runErrors)
+	for err := range runErrors {
+		t.Fatalf("Unexpected error from Run(): %s", err)
+	}
 }
 
 func TestWriteInputFromMaster(t *testing.T) {
@@ -117,6 +121,52 @@ func TestWriteInputFromMaster(t *testing.T) {
 			t.Fatalf("Read() returned `%v` for message `%v`", buf[0:n], message)
 		}
 	})
+}
+
+func makeAuditMarker(command string) []byte {
+	encoded := base64.StdEncoding.EncodeToString([]byte(command))
+	return []byte(auditMarkerPrefix + encoded + auditMarkerSuffix)
+}
+
+func TestAuditMarkerFilter(t *testing.T) {
+	tty, err := New(&bytes.Buffer{}, slaveBiDirectionalPipeEnd{&bytes.Buffer{}}, "", WithPermitWrite())
+	if err != nil {
+		t.Fatalf("Unexpected error from New(): %s", err)
+	}
+
+	input := append([]byte("before "), makeAuditMarker("echo one")...)
+	input = append(input, []byte(" after")...)
+
+	if got, want := string(tty.filterAuditMarkers(input)), "before  after"; got != want {
+		t.Fatalf("filterAuditMarkers() = %q, want %q", got, want)
+	}
+	if len(tty.auditBuffer) != 0 {
+		t.Fatalf("auditBuffer = %q, want empty", string(tty.auditBuffer))
+	}
+}
+
+func TestAuditMarkerSplit(t *testing.T) {
+	tty, err := New(&bytes.Buffer{}, slaveBiDirectionalPipeEnd{&bytes.Buffer{}}, "", WithPermitWrite())
+	if err != nil {
+		t.Fatalf("Unexpected error from New(): %s", err)
+	}
+
+	marker := makeAuditMarker("echo one")
+	first := append([]byte("before "), marker[:10]...)
+	second := append(marker[10:], []byte(" after")...)
+
+	if got, want := string(tty.filterAuditMarkers(first)), "before "; got != want {
+		t.Fatalf("first filterAuditMarkers() = %q, want %q", got, want)
+	}
+	if len(tty.auditBuffer) == 0 {
+		t.Fatalf("auditBuffer is empty, want partial marker")
+	}
+	if got, want := string(tty.filterAuditMarkers(second)), " after"; got != want {
+		t.Fatalf("second filterAuditMarkers() = %q, want %q", got, want)
+	}
+	if len(tty.auditBuffer) != 0 {
+		t.Fatalf("auditBuffer = %q, want empty", string(tty.auditBuffer))
+	}
 }
 
 func TestWriteFromSlave(t *testing.T) {

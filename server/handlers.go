@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
-	"os"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
-	"sync/atomic"
+	"os"
 	"path"
-	"strings"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
+	"github.com/kost/tty2web/utils"
 
 	"github.com/kost/tty2web/webtty"
 )
@@ -43,6 +44,14 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 
 		num := counter.add(1)
 		closeReason := "unknown reason"
+
+		var oauthCookieValue string
+		cookie, err := r.Cookie(oauthCookieName) // Use the cookie name
+		if err == nil {
+			oauthCookieValue = cookie.Value
+		} else if !errors.Is(err, http.ErrNoCookie) {
+			log.Printf("Error getting cookie '%s' in generateHandleWS: %v\n", oauthCookieName, err)
+		}
 
 		defer func() {
 			num := counter.done()
@@ -77,7 +86,7 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 		}
 		defer conn.Close()
 
-		err = server.processWSConn(ctx, conn)
+		err = server.processWSConn(ctx, conn, oauthCookieValue)
 
 		switch err {
 		case ctx.Err():
@@ -92,10 +101,10 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 	}
 }
 
-func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn) error {
+func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, oauthCookieValue string) error {
 	typ, initLine, err := conn.ReadMessage()
 	if err != nil {
-		return errors.Wrapf(err, "failed to authenticate websocket connection")
+		return fmt.Errorf("failed to authenticate websocket connection: %w", err)
 	}
 	if typ != websocket.TextMessage {
 		return errors.New("failed to authenticate websocket connection: invalid message type")
@@ -104,7 +113,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn) e
 	var init InitMessage
 	err = json.Unmarshal(initLine, &init)
 	if err != nil {
-		return errors.Wrapf(err, "failed to authenticate websocket connection")
+		return fmt.Errorf("failed to authenticate websocket connection: %w", err)
 	}
 	if init.AuthToken != server.options.Credential {
 		return errors.New("failed to authenticate websocket connection")
@@ -117,13 +126,13 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn) e
 
 	query, err := url.Parse(queryPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse arguments")
+		return fmt.Errorf("failed to parse arguments: %w", err)
 	}
 	params := query.Query()
 	var slave Slave
 	slave, err = server.factory.New(params)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create backend")
+		return fmt.Errorf("failed to create backend: %w", err)
 	}
 	defer slave.Close()
 
@@ -141,7 +150,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn) e
 	titleBuf := new(bytes.Buffer)
 	err = server.titleTemplate.Execute(titleBuf, titleVars)
 	if err != nil {
-		return errors.Wrapf(err, "failed to fill window title template")
+		return fmt.Errorf("failed to fill window title template: %w", err)
 	}
 
 	opts := []webtty.Option{
@@ -162,16 +171,22 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn) e
 	if server.options.Preferences == nil {
 		server.options.Preferences = &HtermPrefernces{}
 	}
+	if server.options.OTP != "" {
+		opts = append(opts, webtty.WithOTP())
+	}
+	if server.options.BufferSize > 0 {
+		opts = append(opts, webtty.WithBufferSize(server.options.BufferSize))
+	}
+
 	server.options.Preferences.EnableWebGL = server.options.EnableWebGL
 	opts = append(opts, webtty.WithMasterPreferences(server.options.Preferences))
 
-	tty, err := webtty.New(&wsWrapper{conn}, slave, opts...)
+	tty, err := webtty.New(&wsWrapper{conn}, slave, oauthCookieValue, opts...)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create webtty")
+		return fmt.Errorf("failed to create webtty: %w", err)
 	}
 
 	err = tty.Run(ctx)
-
 	return err
 }
 
@@ -221,7 +236,7 @@ func (server *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		var destfile string
 		file, header, erru := r.FormFile("f")
 		if erru != nil {
-			tmpstr:=fmt.Sprintf("Upload error: %v", erru)
+			tmpstr := fmt.Sprintf("Upload error: %v", erru)
 			w.Write([]byte(tmpstr))
 			w.Write([]byte("</body></html>"))
 			return
@@ -230,22 +245,22 @@ func (server *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 		destdir := r.FormValue("d")
 		if destdir == "" {
-			destfile=path.Join(server.options.FileUpload,filepath.Base(header.Filename))
+			destfile = path.Join(server.options.FileUpload, filepath.Base(header.Filename))
 		} else {
 			ndestdir := filepath.Clean(destdir)
 			destfile = path.Join(server.options.FileUpload, ndestdir, filepath.Base(header.Filename))
 			abs, errabs := filepath.Abs(destfile)
 			if errabs != nil || !strings.HasPrefix(abs, server.options.FileUpload) {
 				log.Printf("Request file manipulation detected %s (abs: %s) for %s", destfile, abs, r.RemoteAddr)
-				destfile=path.Join(server.options.FileUpload,filepath.Base(header.Filename))
+				destfile = path.Join(server.options.FileUpload, filepath.Base(header.Filename))
 			}
 		}
-		deststr:=fmt.Sprintf("Uploading %s", destfile)
+		deststr := fmt.Sprintf("Uploading %s", destfile)
 		w.Write([]byte(deststr))
 
 		f, errf := os.OpenFile(destfile, os.O_WRONLY|os.O_CREATE, 0666)
 		if errf != nil {
-			tmpstr:=fmt.Sprintf("Error creating file %s: %v", destfile, errf)
+			tmpstr := fmt.Sprintf("Error creating file %s: %v", destfile, errf)
 			w.Write([]byte(tmpstr))
 			w.Write([]byte("</body></html>"))
 			return
@@ -278,9 +293,9 @@ func (server *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if server.options.Scexec {
 		w.Write([]byte("document.getElementById(\"scexec\").style.display = \"block\";"))
 	}
-	jsurl:="./js"
+	jsurl := "./js"
 	if server.options.JSURL != "" {
-		jsurl=server.options.JSURL
+		jsurl = server.options.JSURL
 	}
 	w.Write([]byte("var jsb = document.createElement(\"script\"); jsb.src = \"" + jsurl + "/tty2web-bundle.js\";"))
 	w.Write([]byte("jsb.onerror = e => console.log(\"error loading tty2web-bundle.js\"); document.head.appendChild(jsb);"))
@@ -309,4 +324,73 @@ func (server *Server) titleVariables(order []string, varUnits map[string]map[str
 	}
 
 	return titleVars
+}
+
+// handleOauthCallBack processes the OAuth2 callback and sets the local token in a cookie.
+func (server *Server) handleOauthCallBack(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "Missing code parameter", http.StatusBadRequest)
+		return
+	}
+	tok := OauthConf.Exchange(code)
+	if tok == nil {
+		http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
+		return
+	}
+
+	claims, err := utils.DecodeOauthTokenUnsafe(tok.AccessToken)
+	if err != nil {
+		log.Printf("Error decoding OAuth2 token: %v", err)
+		http.Error(w, "Invalid access token", http.StatusInternalServerError)
+		return
+	}
+	if claims == nil {
+		log.Printf("Warning: OAuth2 token claims are empty for %s", r.RemoteAddr)
+		http.Error(w, "Invalid access token", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("OAuth2 authorization successful for %s and user %s", r.RemoteAddr, claims[server.options.OauthUsernameMapField])
+	localToken, _ := OauthConf.GenerateLocalToken(map[string]interface{}{"username": claims[server.options.OauthUsernameMapField]})
+	// exp := time.Unix(localClaims["exp"].(int64), 0)
+	http.SetCookie(w, &http.Cookie{
+		Name:  oauthCookieName,
+		Value: localToken,
+		Path:  "/",
+		// Expires:  exp,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	sizeOfCookie := len(oauthCookieName) + len(localToken) + 20 // 20 for other cookie attributes
+	if sizeOfCookie > 4096 {
+		log.Printf("Warning: OAuth2 cookie size (%d bytes) exceeds the limit of 4096 bytes. Consider using a shorter token or reducing cookie attributes.", sizeOfCookie)
+	}
+	w.Header().Set("Content-Type", "text/html")
+	p := "/"
+	if server.options.Url != "" {
+		p = "/" + server.options.Url + "/"
+	}
+	body := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>%[1]s</title>
+</head>
+<body>
+<h1>%[1]s</h1>
+<p>Redirect to home page in 5 seconds</p>
+<script>
+setTimeout(function() {
+	 window.location.href = "%[2]s";
+}, 5000);
+</script>
+</body>
+</html>
+`,
+		"Login Successful",
+		p,
+	)
+	w.Write([]byte(body))
+	w.WriteHeader(http.StatusOK)
 }

@@ -1,60 +1,74 @@
 package server
 
 import (
-	"github.com/pkg/errors"
+	"errors"
 )
 
 type Options struct {
-	Address             string           `hcl:"address" flagName:"address" flagSName:"a" flagDescribe:"IP address to listen" default:"0.0.0.0"`
-	Port                string           `hcl:"port" flagName:"port" flagSName:"p" flagDescribe:"Port number to listen" default:"8080"`
-	PermitWrite         bool             `hcl:"permit_write" flagName:"permit-write" flagSName:"w" flagDescribe:"Permit clients to write to the TTY (BE CAREFUL)" default:"false"`
-	EnableBasicAuth     bool             `hcl:"enable_basic_auth" default:"false"`
-	Credential          string           `hcl:"credential" flagName:"credential" flagSName:"c" flagDescribe:"Credential for Basic Authentication (ex: user:pass, default disabled)" default:""`
-	EnableRandomUrl     bool             `hcl:"enable_random_url" flagName:"random-url" flagSName:"r" flagDescribe:"Add a random string to the URL" default:"false"`
-	EnableWebGL         bool             `hcl:"enable_webgl" flagName:"enable-webgl" flagDescribe:"Enable WebGL renderer" default:"true"`
-	All                 bool             `hcl:"all" flagName:"all" flagDescribe:"Turn on all features: download /, upload /, api, regeorg, ..." default:"false"`
-	API                 bool             `hcl:"api" flagName:"api" flagDescribe:"Enable API for executing commands on the system (BE CAREFUL!)" default:"false"`
-	Scexec              bool             `hcl:"scexec" flagName:"sc" flagDescribe:"Enable API for executing sc on the system (BE CAREFUL!)" default:"false"`
-	Regeorg             bool             `hcl:"regeorg" flagName:"regeorg" flagDescribe:"Enable socks4/socks5 proxy using regeorg" default:"false"`
-	RandomUrlLength     int              `hcl:"random_url_length" flagName:"random-url-length" flagDescribe:"Random URL length" default:"8"`
-	Url                 string           `hcl:"url" flagName:"url" flagDescribe:"Specify string for the URL" default:""`
-	JSURL               string           `hcl:"jsurl" flagName:"jsurl" flagDescribe:"Specify string for custom URL serving Javascript files (useful for DNS)" default:""`
-	FileDownload        string           `hcl:"download" flagName:"download" flagDescribe:"Serve files to download from specified dir" default:""`
-	FileUpload          string           `hcl:"upload" flagName:"upload" flagDescribe:"Enable uploading of files to the specified dir (BE CAREFUL!)" default:""`
-	EnableTLS           bool             `hcl:"enable_tls" flagName:"tls" flagSName:"t" flagDescribe:"Enable TLS/SSL" default:"false"`
-	TLSCrtFile          string           `hcl:"tls_crt_file" flagName:"tls-crt" flagDescribe:"TLS/SSL certificate file path" default:"~/.tty2web.crt"`
-	TLSKeyFile          string           `hcl:"tls_key_file" flagName:"tls-key" flagDescribe:"TLS/SSL key file path" default:"~/.tty2web.key"`
-	EnableTLSClientAuth bool             `hcl:"enable_tls_client_auth" default:"false"`
-	TLSCACrtFile        string           `hcl:"tls_ca_crt_file" flagName:"tls-ca-crt" flagDescribe:"TLS/SSL CA certificate file for client certifications" default:"~/.tty2web.ca.crt"`
-	IndexFile           string           `hcl:"index_file" flagName:"index" flagDescribe:"Custom index.html file" default:""`
-	TitleFormat         string           `hcl:"title_format" flagName:"title-format" flagSName:"" flagDescribe:"Title format of browser window" default:"{{ .command }}@{{ .hostname }}"`
-	Dns                 string           `hcl:"dns" flagName:"dns" flagSName:"" flagDescribe:"Use domain for DNS tunneling (ex. example.com)" default:""`
-	DnsListen           string           `hcl:"dnslisten" flagName:"dnslisten" flagSName:"" flagDescribe:"Listen for reverse connection agents (ex. 0.0.0.0:53)" default:""`
-	DnsKey              string           `hcl:"dnskey" flagName:"dnskey" flagSName:"" flagDescribe:"Password/Key to use for DNS tunnel" default:""`
-	DnsDelay            string           `hcl:"dnsdelay" flagName:"dnsdelay" flagSName:"" flagDescribe:"Delay time between polling for DNS requests" default:"200ms"`
-	Listen              string           `hcl:"listen" flagName:"listen" flagSName:"" flagDescribe:"Listen for reverse connection agents (ex. 0.0.0.0:4444)" default:""`
-	AgentTLS            bool             `hcl:"agenttls" flagName:"agenttls" flagDescribe:"Enable TLS for listening for agents and clients itself" default:"false"`
-	ListenCert          string           `hcl:"listencert" flagName:"listencert" flagSName:"" flagDescribe:"Certificate and key for listen server (ex. mycert)" default:""`
-	Server              string           `hcl:"server" flagName:"server" flagSName:"" flagDescribe:"Server for forwarding reverse connections (ex. 127.0.0.1:6000)" default:"127.0.0.1:6000"`
-	Password            string           `hcl:"password" flagName:"password" flagSName:"" flagDescribe:"Password for reverse server connection" default:""`
-	Connect             string           `hcl:"connect" flagName:"connect" flagSName:"" flagDescribe:"Connect to host for reverse connection (ex. 192.168.1.1:4444)" default:""`
-	Proxy               string           `hcl:"proxy" flagName:"proxy" flagSName:"" flagDescribe:"Use proxy for reverse server connection (ex. 192.168.1.1:8080)" default:""`
-	ProxyAuth           string           `hcl:"proxyauth" flagName:"proxyauth" flagSName:"" flagDescribe:"Use proxy authentication for reverse server connection (ex. DOMAIN/user:password)" default:""`
-	UserAgent           string           `hcl:"useragent" flagName:"useragent" flagSName:"" flagDescribe:"Use user agent for reverse server connection (ex. Mozilla)" default:""`
-	EnableReconnect     bool             `hcl:"enable_reconnect" flagName:"reconnect" flagDescribe:"Enable reconnection" default:"false"`
-	Verbose             bool             `hcl:"verbose" flagName:"verbose" flagDescribe:"Enable verbose messages" default:"false"`
-	ReconnectTime       int              `hcl:"reconnect_time" flagName:"reconnect-time" flagDescribe:"Time to reconnect" default:"10"`
-	MaxConnection       int              `hcl:"max_connection" flagName:"max-connection" flagDescribe:"Maximum connection to tty2web" default:"0"`
-	Once                bool             `hcl:"once" flagName:"once" flagDescribe:"Accept only one client and exit on disconnection" default:"false"`
-	Timeout             int              `hcl:"timeout" flagName:"timeout" flagDescribe:"Timeout seconds for waiting a client(0 to disable)" default:"0"`
-	PermitArguments     bool             `hcl:"permit_arguments" flagName:"permit-arguments" flagDescribe:"Permit clients to send command line arguments in URL (e.g. http://example.com:8080/?arg=AAA&arg=BBB)" default:"true"`
-	Preferences         *HtermPrefernces `hcl:"preferences"`
-	Width               int              `hcl:"width" flagName:"width" flagDescribe:"Static width of the screen, 0(default) means dynamically resize" default:"0"`
-	Height              int              `hcl:"height" flagName:"height" flagDescribe:"Static height of the screen, 0(default) means dynamically resize" default:"0"`
-	WSOrigin            string           `hcl:"ws_origin" flagName:"ws-origin" flagDescribe:"A regular expression that matches origin URLs to be accepted by WebSocket. No cross origin requests are acceptable by default" default:""`
-	Term                string           `hcl:"term" flagName:"term" flagDescribe:"Terminal name to use on the browser, one of xterm or hterm." default:"xterm"`
-
-	TitleVariables map[string]interface{}
+	Address               string           `hcl:"address" flagName:"address" flagSName:"a" flagDescribe:"IP address to listen" default:"0.0.0.0"`
+	Port                  string           `hcl:"port" flagName:"port" flagSName:"p" flagDescribe:"Port number to listen" default:"8080"`
+	PermitWrite           bool             `hcl:"permit_write" flagName:"permit-write" flagSName:"w" flagDescribe:"Permit clients to write to the TTY (BE CAREFUL)" default:"false"`
+	EnableBasicAuth       bool             `hcl:"enable_basic_auth" default:"false"`
+	Credential            string           `hcl:"credential" flagName:"credential" flagSName:"c" flagDescribe:"Credential for Basic Authentication (ex: user:pass, default disabled)" default:""`
+	EnableOauth           bool             `hcl:"enable_oauth" flagName:"oauth" flagDescribe:"Enable OAuth authentication (default disabled)" default:"false"`
+	EnableRandomUrl       bool             `hcl:"enable_random_url" flagName:"random-url" flagSName:"r" flagDescribe:"Add a random string to the URL" default:"false"`
+	EnableWebGL           bool             `hcl:"enable_webgl" flagName:"enable-webgl" flagDescribe:"Enable WebGL renderer" default:"true"`
+	All                   bool             `hcl:"all" flagName:"all" flagDescribe:"Turn on all features: download /, upload /, api, regeorg, ..." default:"false"`
+	API                   bool             `hcl:"api" flagName:"api" flagDescribe:"Enable API for executing commands on the system (BE CAREFUL!)" default:"false"`
+	Scexec                bool             `hcl:"scexec" flagName:"sc" flagDescribe:"Enable API for executing sc on the system (BE CAREFUL!)" default:"false"`
+	Regeorg               bool             `hcl:"regeorg" flagName:"regeorg" flagDescribe:"Enable socks4/socks5 proxy using regeorg" default:"false"`
+	RandomUrlLength       int              `hcl:"random_url_length" flagName:"random-url-length" flagDescribe:"Random URL length" default:"8"`
+	Url                   string           `hcl:"url" flagName:"url" flagDescribe:"Specify string for the URL" default:""`
+	JSURL                 string           `hcl:"jsurl" flagName:"jsurl" flagDescribe:"Specify string for custom URL serving Javascript files (useful for DNS)" default:""`
+	FileDownload          string           `hcl:"download" flagName:"download" flagDescribe:"Serve files to download from specified dir" default:""`
+	FileUpload            string           `hcl:"upload" flagName:"upload" flagDescribe:"Enable uploading of files to the specified dir (BE CAREFUL!)" default:""`
+	EnableTLS             bool             `hcl:"enable_tls" flagName:"tls" flagSName:"t" flagDescribe:"Enable TLS/SSL" default:"false"`
+	TLSCrtFile            string           `hcl:"tls_crt_file" flagName:"tls-crt" flagDescribe:"TLS/SSL certificate file path" default:"~/.tty2web.crt"`
+	TLSKeyFile            string           `hcl:"tls_key_file" flagName:"tls-key" flagDescribe:"TLS/SSL key file path" default:"~/.tty2web.key"`
+	EnableTLSClientAuth   bool             `hcl:"enable_tls_client_auth" default:"false"`
+	TLSCACrtFile          string           `hcl:"tls_ca_crt_file" flagName:"tls-ca-crt" flagDescribe:"TLS/SSL CA certificate file for client certifications" default:"~/.tty2web.ca.crt"`
+	IndexFile             string           `hcl:"index_file" flagName:"index" flagDescribe:"Custom index.html file" default:""`
+	TitleFormat           string           `hcl:"title_format" flagName:"title-format" flagSName:"" flagDescribe:"Title format of browser window" default:"{{ .command }}@{{ .hostname }}"`
+	Dns                   string           `hcl:"dns" flagName:"dns" flagSName:"" flagDescribe:"Use domain for DNS tunneling (ex. example.com)" default:""`
+	DnsListen             string           `hcl:"dnslisten" flagName:"dnslisten" flagSName:"" flagDescribe:"Listen for reverse connection agents (ex. 0.0.0.0:53)" default:""`
+	DnsKey                string           `hcl:"dnskey" flagName:"dnskey" flagSName:"" flagDescribe:"Password/Key to use for DNS tunnel" default:""`
+	DnsDelay              string           `hcl:"dnsdelay" flagName:"dnsdelay" flagSName:"" flagDescribe:"Delay time between polling for DNS requests" default:"200ms"`
+	Listen                string           `hcl:"listen" flagName:"listen" flagSName:"" flagDescribe:"Listen for reverse connection agents (ex. 0.0.0.0:4444)" default:""`
+	AgentTLS              bool             `hcl:"agenttls" flagName:"agenttls" flagDescribe:"Enable TLS for listening for agents and clients itself" default:"false"`
+	ListenCert            string           `hcl:"listencert" flagName:"listencert" flagSName:"" flagDescribe:"Certificate and key for listen server (ex. mycert)" default:""`
+	Server                string           `hcl:"server" flagName:"server" flagSName:"" flagDescribe:"Server for forwarding reverse connections (ex. 127.0.0.1:6000)" default:"127.0.0.1:6000"`
+	Password              string           `hcl:"password" flagName:"password" flagSName:"" flagDescribe:"Password for reverse server connection" default:""`
+	Connect               string           `hcl:"connect" flagName:"connect" flagSName:"" flagDescribe:"Connect to host for reverse connection (ex. 192.168.1.1:4444)" default:""`
+	Proxy                 string           `hcl:"proxy" flagName:"proxy" flagSName:"" flagDescribe:"Use proxy for reverse server connection (ex. 192.168.1.1:8080)" default:""`
+	ProxyAuth             string           `hcl:"proxyauth" flagName:"proxyauth" flagSName:"" flagDescribe:"Use proxy authentication for reverse server connection (ex. DOMAIN/user:password)" default:""`
+	UserAgent             string           `hcl:"useragent" flagName:"useragent" flagSName:"" flagDescribe:"Use user agent for reverse server connection (ex. Mozilla)" default:""`
+	EnableReconnect       bool             `hcl:"enable_reconnect" flagName:"reconnect" flagDescribe:"Enable reconnection" default:"false"`
+	Verbose               bool             `hcl:"verbose" flagName:"verbose" flagDescribe:"Enable verbose messages" default:"false"`
+	ReconnectTime         int              `hcl:"reconnect_time" flagName:"reconnect-time" flagDescribe:"Time to reconnect" default:"10"`
+	MaxConnection         int              `hcl:"max_connection" flagName:"max-connection" flagDescribe:"Maximum connection to tty2web" default:"10"`
+	Once                  bool             `hcl:"once" flagName:"once" flagDescribe:"Accept only one client and exit on disconnection" default:"false"`
+	Timeout               int              `hcl:"timeout" flagName:"timeout" flagDescribe:"Timeout seconds for waiting a client(0 to disable)" default:"0"`
+	PermitArguments       bool             `hcl:"permit_arguments" flagName:"permit-arguments" flagDescribe:"Permit clients to send command line arguments in URL (e.g. http://example.com:8080/?arg=AAA&arg=BBB)" default:"true"`
+	Preferences           *HtermPrefernces `hcl:"preferences"`
+	Width                 int              `hcl:"width" flagName:"width" flagDescribe:"Static width of the screen, 0(default) means dynamically resize" default:"0"`
+	Height                int              `hcl:"height" flagName:"height" flagDescribe:"Static height of the screen, 0(default) means dynamically resize" default:"0"`
+	WSOrigin              string           `hcl:"ws_origin" flagName:"ws-origin" flagDescribe:"A regular expression that matches origin URLs to be accepted by WebSocket. No cross origin requests are acceptable by default" default:""`
+	Term                  string           `hcl:"term" flagName:"term" flagDescribe:"Terminal name to use on the browser, one of xterm or hterm." default:"xterm"`
+	OTP                   string           `hcl:"otp" flagName:"otp" flagDescribe:"One time password secret for terminal" default:""`
+	OTPInterval           int              `hcl:"otp_interval" flagName:"otp-interval" flagDescribe:"One time password interval in seconds" default:"180"`
+	OTPDigit              int              `hcl:"otp_digit" flagName:"otp-digit" flagDescribe:"One time password digit length" default:"8"`
+	TitleVariables        map[string]interface{}
+	OauthClientID         string   `hcl:"oauth_client_id" flagName:"oauth-client-id" flagDescribe:"OAuth client ID for OAuth authentication" default:""`
+	OauthClientSecret     string   `hcl:"oauth_client_secret" flagName:"oauth-client-secret" flagDescribe:"OAuth client secret for OAuth authentication" default:""`
+	OauthRedirectURL      string   `hcl:"oauth_redirect_url" flagName:"oauth-redirect-url" flagDescribe:"OAuth redirect URL for OAuth authentication" default:""`
+	OauthScopes           []string `hcl:"oauth_scopes" flagName:"oauth-scopes" flagDescribe:"OAuth scopes for OAuth authentication" default:"read"`
+	OauthAuthUrl          string   `hcl:"oauth_auth_url" flagName:"oauth-auth-url" flagDescribe:"OAuth authorization URL for OAuth authentication" default:""`
+	OauthTokenUrl         string   `hcl:"oauth_token_url" flagName:"oauth-token-url" flagDescribe:"OAuth token URL for OAuth authentication" default:""`
+	OauthDeviceAuthUrl    string   `hcl:"oauth_device_auth_url" flagName:"oauth-device-auth-url" flagDescribe:"OAuth device authorization URL for OAuth authentication" default:""`
+	OauthUsernameMapField string   `hcl:"oauth_username_map_field" flagName:"oauth-username-map-field" flagDescribe:"Field in the OAuth token to use as username (default: sub)" default:"unique_name"`
+	OauthGroupMapField    string   `hcl:"oauth_group_map_field" flagName:"oauth-group-map-field" flagDescribe:"Field in the OAuth token to use as group (default: groups)" default:"groups"`
+	JWTSecret             string   `hcl:"jwt_secret" flagName:"jwt-secret" flagDescribe:"JWT secret for JWT authentication if empty will generate at start" default:""`
+	BufferSize            int      `hcl:"buffer_size" flagName:"buffer-size" flagDescribe:"Size of the write buffer for each terminal session" default:"102400"`
 }
 
 func (options *Options) Validate() error {

@@ -1,7 +1,8 @@
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { WebLinksAddon } from 'xterm-addon-web-links';
-import { WebglAddon } from 'xterm-addon-webgl';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { ColorTerm } from './colorTerm';
 import { lib } from "libapps"
 
 const terminal = new Terminal()
@@ -41,11 +42,10 @@ export class Xterm {
         };
 
         this.term.open(elem);
-	this.term.focus();
-	this.resizeListener();
-	window.addEventListener("resize", () => { this.resizeListener(); });
-
-        this.decoder = new lib.UTF8Decoder()
+        this.term.focus();
+        this.resizeListener();
+        window.addEventListener("resize", () => { this.resizeListener(); });
+        this.decoder = new lib.UTF8Decoder();
     };
 
     info(): { columns: number, rows: number } {
@@ -53,7 +53,7 @@ export class Xterm {
     };
 
     output(data: string) {
-        this.term.write(this.decoder.decode(data));
+        this.term.write(ColorTerm.colorize(this.decoder.decode(data)));
     };
 
     showMessage(message: string, timeout: number) {

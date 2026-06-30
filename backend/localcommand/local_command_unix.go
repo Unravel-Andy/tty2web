@@ -1,9 +1,13 @@
+//go:build !windows
 // +build !windows
 
 package localcommand
 
 import (
+	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 	"unsafe"
@@ -27,13 +31,25 @@ type LocalCommand struct {
 	cmd       *exec.Cmd
 	pty       pty.Pty
 	ptyClosed chan struct{}
+	auditFile string
 }
 
 func New(command string, argv []string, options ...Option) (*LocalCommand, error) {
+	auditFile, err := createBashAuditFile(command, argv)
+	if err != nil {
+		return nil, err
+	}
+	if auditFile != "" {
+		argv = append([]string{"--rcfile", auditFile, "-i"}, argv...)
+	}
+
 	cmd := exec.Command(command, argv...)
 
 	pty, err := pty.Start(cmd)
 	if err != nil {
+		if auditFile != "" {
+			os.Remove(auditFile)
+		}
 		// todo close cmd?
 		return nil, errors.Wrapf(err, "failed to start command `%s`", command)
 	}
@@ -49,6 +65,7 @@ func New(command string, argv []string, options ...Option) (*LocalCommand, error
 		cmd:       cmd,
 		pty:       pty,
 		ptyClosed: ptyClosed,
+		auditFile: auditFile,
 	}
 
 	for _, option := range options {
@@ -60,6 +77,9 @@ func New(command string, argv []string, options ...Option) (*LocalCommand, error
 	go func() {
 		defer func() {
 			lcmd.pty.Close()
+			if lcmd.auditFile != "" {
+				os.Remove(lcmd.auditFile)
+			}
 			close(lcmd.ptyClosed)
 		}()
 
@@ -67,6 +87,60 @@ func New(command string, argv []string, options ...Option) (*LocalCommand, error
 	}()
 
 	return lcmd, nil
+}
+
+func createBashAuditFile(command string, argv []string) (string, error) {
+	if !isPlainBashCommand(command, argv) {
+		return "", nil
+	}
+
+	file, err := os.CreateTemp("", "tty2web-bashrc-*")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create bash audit rcfile")
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(bashAuditScript()); err != nil {
+		os.Remove(file.Name())
+		return "", errors.Wrap(err, "failed to write bash audit rcfile")
+	}
+
+	log.Printf("Bash command audit hook enabled")
+	return file.Name(), nil
+}
+
+func isPlainBashCommand(command string, argv []string) bool {
+	base := filepath.Base(command)
+	if base != "bash" {
+		log.Printf("Bash command audit hook disabled for non-bash command %q", command)
+		return false
+	}
+	if len(argv) > 0 {
+		log.Printf("Bash command audit hook disabled for bash with arguments")
+		return false
+	}
+	return true
+}
+
+func bashAuditScript() string {
+	return `if [ -f ~/.bashrc ]; then
+	. ~/.bashrc
+fi
+
+__tty2web_audit_debug() {
+	local command=$BASH_COMMAND
+	case "$command" in
+		__tty2web_audit_debug*|trap\ *|PROMPT_COMMAND=*)
+			return 0
+			;;
+	esac
+	if [ -n "$command" ]; then
+		printf '\033]777;tty2web-audit=%s\a' "$(printf '%s' "$command" | base64 | tr -d '\n')"
+	fi
+}
+
+trap '__tty2web_audit_debug' DEBUG
+`
 }
 
 func (lcmd *LocalCommand) Read(p []byte) (n int, err error) {

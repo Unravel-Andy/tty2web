@@ -4,6 +4,7 @@ export const msgInputUnknown = '0';
 export const msgInput = '1';
 export const msgPing = '2';
 export const msgResizeTerminal = '3';
+export const msgOTPInput = '4';
 
 export const msgUnknownOutput = '0';
 export const msgOutput = '1';
@@ -11,6 +12,7 @@ export const msgPong = '2';
 export const msgSetWindowTitle = '3';
 export const msgSetPreferences = '4';
 export const msgSetReconnect = '5';
+export const msgOTPRequired = '6';
 
 
 export interface Terminal {
@@ -48,6 +50,8 @@ export class WebTTY {
     args: string;
     authToken: string;
     reconnect: number;
+    verifyOTP: boolean;
+    otp: string;
 
     constructor(term: Terminal, connectionFactory: ConnectionFactory, args: string, authToken: string) {
         this.term = term;
@@ -55,6 +59,8 @@ export class WebTTY {
         this.args = args;
         this.authToken = authToken;
         this.reconnect = -1;
+        this.verifyOTP = false;
+        this.otp = "";
     };
 
     open() {
@@ -90,7 +96,18 @@ export class WebTTY {
 
                 this.term.onInput(
                     (input: string) => {
-                        connection.send(msgInput + input);
+                        if (this.verifyOTP) {
+                            // if input is enter or escape, send the OTP
+                            console.log("OTP input: " + input + "; otp: " + this.otp);
+                            if (input === "\r") {
+                                connection.send(msgOTPInput + this.otp);
+                                this.otp = "";
+                            } else if (input.length > 0) {
+                                this.otp += input;
+                            }
+                        } else {
+                            connection.send(msgInput + input);
+                        }
                     }
                 );
 
@@ -120,6 +137,11 @@ export class WebTTY {
                         console.log("Enabling reconnect: " + autoReconnect + " seconds")
                         this.reconnect = autoReconnect;
                         break;
+                    case msgOTPRequired:
+                        var msg = JSON.parse(atob(payload));
+                        this.term.output(msg.message);
+                        this.verifyOTP = msg.shouldVerify == "true";
+                        break;
                 }
             });
 
@@ -145,4 +167,4 @@ export class WebTTY {
             connection.close();
         }
     };
-};
+}

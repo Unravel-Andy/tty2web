@@ -112,7 +112,7 @@ Point your web browser to <http://127.0.0.1:8000>
    --reconnect                   Enable reconnection (default: false) [$TTY2WEB_RECONNECT]
    --verbose                     Enable verbose messages (default: false) [$TTY2WEB_VERBOSE]
    --reconnect-time value        Time to reconnect (default: 10) [$TTY2WEB_RECONNECT_TIME]
-   --max-connection value        Maximum connection to tty2web (default: 0) [$TTY2WEB_MAX_CONNECTION]
+   --max-connection value        Maximum connection to tty2web (default: 10) [$TTY2WEB_MAX_CONNECTION]
    --once                        Accept only one client and exit on disconnection (default: false) [$TTY2WEB_ONCE]
    --timeout value               Timeout seconds for waiting a client(0 to disable) (default: 0) [$TTY2WEB_TIMEOUT]
    --permit-arguments            Permit clients to send command line arguments in URL (e.g. http://example.com:8080/?arg=AAA&arg=BBB) (default: false) [$TTY2WEB_PERMIT_ARGUMENTS]
@@ -123,6 +123,21 @@ Point your web browser to <http://127.0.0.1:8000>
    --close-signal value          Signal sent to the command process when tty2webclose it (default: SIGHUP) (default: 1) [$TTY2WEB_CLOSE_SIGNAL]
    --close-timeout value         Time in seconds to force kill process after client is disconnected (default: -1) (default: -1) [$TTY2WEB_CLOSE_TIMEOUT]
    --config value                Config file path (default: "~/.tty2web") [$TTY2WEB_CONFIG]
+   --otp                         One time password secret for terminal (default: "")
+   --otp-interval                Interval for one time password (default: 180)
+   --otp-digits                  Digits for one time password (default: 8)
+   --oauth-client-id value       OAuth2 client ID for authentication [$TTY2WEB_OAUTH_CLIENT_ID]
+   --oauth-client-secret value   OAuth2 client secret for authentication [$TTY2WEB_OAUTH_CLIENT_SECRET]
+   --oauth                       Enable OAuth authentication (default: false) [$TTY2WEB_OAUTH]
+   --oauth-redirect-url value    OAuth redirect URL for OAuth authentication [$TTY2WEB_OAUTH_REDIRECT_URL]
+   --oauth-scopes value          OAuth scopes for OAuth authentication (default: "read") [$TTY2WEB_OAUTH_SCOPES]
+   --oauth-auth-url value        OAuth authorization URL for OAuth authentication [$TTY2WEB_OAUTH_AUTH_URL]
+   --oauth-token-url value       OAuth token URL for OAuth authentication [$TTY2WEB_OAUTH_TOKEN_URL]
+   --oauth-device-auth-url value OAuth device authorization URL for OAuth authentication [$TTY2WEB_OAUTH_DEVICE_AUTH_URL]
+   --oauth-username-map-field     Field in the OAuth token to use as username (default: unique_name) [$TTY2WEB_OAUTH_USERNAME_MAP_FIELD]
+   --oauth-group-map-field        Field in the OAuth token to use as group (default: groups) [$TTY2WEB_OAUTH_GROUP_MAP_FIELD]
+   --jwt-secret value            JWT secret for JWT authentication if empty will generate at start [$TTY2WEB_JWT_SECRET]
+   --buffer-size value           Size of the buffer for each terminal session (default: 102400) [$TTY2WEB_BUFFER_SIZE]
    --help                        Displays help (default: false)
    --version, -v                 print the version
 ```

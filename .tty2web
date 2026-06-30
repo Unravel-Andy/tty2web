@@ -57,8 +57,8 @@
 // [int] Timeout seconds for waiting a client (0 to disable)
 // timeout = 60
 
-// [int] Maximum connection to gotty, 0(default) means no limit.
-// max_connection = 0
+// [int] Maximum connection to gotty, 0 means no limit.
+// max_connection = 10
 
 // [bool] Accept only one client and exit gotty once the client exits
 // once = false

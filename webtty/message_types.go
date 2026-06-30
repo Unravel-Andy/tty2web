@@ -13,6 +13,8 @@ const (
 	Ping = '2'
 	// Notify that the browser size has been changed
 	ResizeTerminal = '3'
+	// User input of OTP code
+	OTPInput = '4'
 )
 
 const (
@@ -28,4 +30,6 @@ const (
 	SetPreferences = '4'
 	// Make terminal to reconnect
 	SetReconnect = '5'
+	// OTP request to the browser
+	OTPRequest = '6'
 )

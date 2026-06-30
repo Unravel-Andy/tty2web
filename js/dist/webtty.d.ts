@@ -3,12 +3,14 @@ export declare const msgInputUnknown = "0";
 export declare const msgInput = "1";
 export declare const msgPing = "2";
 export declare const msgResizeTerminal = "3";
+export declare const msgOTPInput = "4";
 export declare const msgUnknownOutput = "0";
 export declare const msgOutput = "1";
 export declare const msgPong = "2";
 export declare const msgSetWindowTitle = "3";
 export declare const msgSetPreferences = "4";
 export declare const msgSetReconnect = "5";
+export declare const msgOTPRequired = "6";
 export interface Terminal {
     info(): {
         columns: number;
@@ -43,6 +45,8 @@ export declare class WebTTY {
     args: string;
     authToken: string;
     reconnect: number;
+    verifyOTP: boolean;
+    otp: string;
     constructor(term: Terminal, connectionFactory: ConnectionFactory, args: string, authToken: string);
     open(): () => void;
 }

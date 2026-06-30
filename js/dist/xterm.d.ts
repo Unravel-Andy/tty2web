@@ -1,4 +1,4 @@
-import { Terminal } from 'xterm';
+import { Terminal } from '@xterm/xterm';
 import { lib } from "libapps";
 export declare class Xterm {
     elem: HTMLElement;
